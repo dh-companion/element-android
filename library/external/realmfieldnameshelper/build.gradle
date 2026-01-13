@@ -4,6 +4,12 @@ apply plugin: 'java'
 sourceCompatibility = versions.sourceCompat
 targetCompatibility = versions.targetCompat
 
+compileKotlin {
+    kotlinOptions {
+        jvmTarget = versions.jvmTarget
+    }
+}
+
 dependencies {
     implementation 'com.squareup:javapoet:1.13.0'
 }
