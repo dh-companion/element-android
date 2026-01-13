@@ -1,2 +1,5 @@
 jdk:
   - openjdk17
+
+install:
+  - ./gradlew :matrix-sdk-android:publishToMavenLocal
