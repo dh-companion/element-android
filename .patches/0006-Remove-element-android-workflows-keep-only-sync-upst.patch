@@ -1,0 +1,1080 @@
+From cc16e83244a552ba7556d3fc2f3e39e6e5f6e9a4 Mon Sep 17 00:00:00 2001
+From: LukaRusadze <rusadzeluka@gmail.com>
+Date: Tue, 13 Jan 2026 16:18:03 +0400
+Subject: [PATCH] Remove element-android workflows, keep only sync-upstream
+
+---
+ .github/workflows/build.yml                   | 106 -------------
+ .github/workflows/danger.yml                  |  20 ---
+ .github/workflows/docs.yml                    |  22 ---
+ .../workflows/gradle-wrapper-validation.yml   |  14 --
+ .github/workflows/nightly.yml                 |  48 ------
+ .github/workflows/post-pr.yml                 | 103 ------------
+ .github/workflows/quality.yml                 | 121 --------------
+ .../workflows/sync-from-external-sources.yml  |  60 -------
+ .github/workflows/tests.yml                   | 149 ------------------
+ .github/workflows/triage-labelled.yml         |  79 ----------
+ .../workflows/triage-move-review-requests.yml | 143 -----------------
+ .github/workflows/triage-priority-bugs.yml    |  57 -------
+ .github/workflows/update-gradle-wrapper.yml   |  20 ---
+ .github/workflows/validate-lfs.yml            |  15 --
+ 14 files changed, 957 deletions(-)
+ delete mode 100644 .github/workflows/build.yml
+ delete mode 100644 .github/workflows/danger.yml
+ delete mode 100644 .github/workflows/docs.yml
+ delete mode 100644 .github/workflows/gradle-wrapper-validation.yml
+ delete mode 100644 .github/workflows/nightly.yml
+ delete mode 100644 .github/workflows/post-pr.yml
+ delete mode 100644 .github/workflows/quality.yml
+ delete mode 100644 .github/workflows/sync-from-external-sources.yml
+ delete mode 100644 .github/workflows/tests.yml
+ delete mode 100644 .github/workflows/triage-labelled.yml
+ delete mode 100644 .github/workflows/triage-move-review-requests.yml
+ delete mode 100644 .github/workflows/triage-priority-bugs.yml
+ delete mode 100644 .github/workflows/update-gradle-wrapper.yml
+ delete mode 100644 .github/workflows/validate-lfs.yml
+
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+deleted file mode 100644
+index 88db81c5cf..0000000000
+--- a/.github/workflows/build.yml
++++ /dev/null
+@@ -1,106 +0,0 @@
+-name: APK Build
+-
+-on:
+-  pull_request: { }
+-  push:
+-    branches: [ main, develop ]
+-
+-# Enrich gradle.properties for CI/CD
+-env:
+-  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx3072m -Dfile.encoding=UTF-8 -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=1g" -Dkotlin.daemon.jvm.options="-Xmx2560m" -Dkotlin.incremental=false
+-  CI_GRADLE_ARG_PROPERTIES: --stacktrace -PpreDexEnable=false --max-workers 2 --no-daemon
+-
+-jobs:
+-  debug:
+-    name: Build debug APKs (${{ matrix.target }})
+-    runs-on: ubuntu-latest
+-    if: github.ref != 'refs/heads/main'
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        target: [ Gplay, Fdroid ]
+-    # Allow all jobs on develop. Just one per PR.
+-    concurrency:
+-      group: ${{ github.ref == 'refs/heads/develop' && format('integration-tests-develop-{0}-{1}', matrix.target, github.sha) || format('build-debug-{0}-{1}', matrix.target, github.ref)  }}
+-      cancel-in-progress: true
+-    steps:
+-      - uses: actions/checkout@v4
+-        with:
+-          # https://github.com/actions/checkout/issues/881
+-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Assemble ${{ matrix.target }} debug apk
+-        run: ./gradlew assemble${{ matrix.target }}Debug $CI_GRADLE_ARG_PROPERTIES
+-      - name: Upload ${{ matrix.target }} debug APKs
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: vector-${{ matrix.target }}-debug
+-          path: |
+-            vector-app/build/outputs/apk/*/debug/*.apk
+-
+-  release:
+-    name: Build unsigned GPlay APKs
+-    runs-on: ubuntu-latest
+-    concurrency:
+-      group: ${{ github.ref == 'refs/head/main' && format('build-release-apk-main-{0}', github.sha) || github.ref == 'refs/heads/develop' && format('build-release-apk-develop-{0}', github.sha) || format('build-debug-{0}', github.ref)  }}
+-      cancel-in-progress: ${{ github.ref != 'refs/head/main' }}
+-    steps:
+-      - uses: actions/checkout@v4
+-        with:
+-          # https://github.com/actions/checkout/issues/881
+-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Assemble GPlay unsigned apk
+-        run: ./gradlew clean assembleGplayRelease $CI_GRADLE_ARG_PROPERTIES
+-      - name: Upload Gplay unsigned APKs
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: vector-gplay-release-unsigned
+-          path: |
+-            vector-app/build/outputs/apk/*/release/*.apk
+-
+-  exodus:
+-    runs-on: ubuntu-latest
+-    needs: release
+-    steps:
+-      - name: Obtain apk from artifact
+-        id: download
+-        uses: actions/download-artifact@v4
+-        with:
+-          name: vector-gplay-release-unsigned
+-      - name: Show apks in artifact
+-        run: ls -R ${{steps.download.outputs.download-path}}
+-      - name: Execute exodus-standalone
+-        uses: docker://exodusprivacy/exodus-standalone:latest
+-        with:
+-          # Don't fail when finding trackers so they can be reported later
+-          args: /github/workspace/gplay/release/vector-gplay-universal-release-unsigned.apk -j -o /github/workspace/exodus.json -e 0
+-      - name: Upload exodus json report
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: exodus.json
+-          path: |
+-            exodus.json
+-      - name: Check for trackers
+-        env:
+-          SENTRY_ID: 447
+-        # Should only contain a Sentry item
+-        run: |
+-          TRACKER_IDS=$(jq ".trackers[] | .id" exodus.json)
+-          [ $TRACKER_IDS = ${{ env.SENTRY_ID }} ] || { echo '::error static analysis identified user tracking library' ; exit 1; }
+diff --git a/.github/workflows/danger.yml b/.github/workflows/danger.yml
+deleted file mode 100644
+index 5eb2f1af3c..0000000000
+--- a/.github/workflows/danger.yml
++++ /dev/null
+@@ -1,20 +0,0 @@
+-name: Danger CI
+-
+-on: [pull_request]
+-
+-jobs:
+-  build:
+-    runs-on: ubuntu-latest
+-    name: Danger
+-    steps:
+-      - uses: actions/checkout@v4
+-      - run: |
+-          npm install --save-dev @babel/plugin-transform-flow-strip-types
+-      - name: Danger
+-        uses: danger/danger-js@11.2.6
+-        with:
+-          args: "--dangerfile ./tools/danger/dangerfile.js"
+-        env:
+-          DANGER_GITHUB_API_TOKEN: ${{ secrets.DANGER_GITHUB_API_TOKEN }}
+-          # Fallback for forks
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+diff --git a/.github/workflows/docs.yml b/.github/workflows/docs.yml
+deleted file mode 100644
+index 1a27d491a0..0000000000
+--- a/.github/workflows/docs.yml
++++ /dev/null
+@@ -1,22 +0,0 @@
+-name: Documentation
+-
+-on:
+-  push:
+-    branches: [ develop ]
+-
+-jobs:
+-  docs:
+-    name: Generate and publish Android Matrix SDK documentation
+-    runs-on: ubuntu-latest
+-    steps:
+-      - name: Checkout repository
+-        uses: actions/checkout@v4
+-
+-      - name: Build docs
+-        run: ./gradlew dokkaHtml
+-
+-      - name: Deploy docs
+-        uses: peaceiris/actions-gh-pages@v3
+-        with:
+-          github_token: ${{ secrets.GITHUB_TOKEN }}
+-          publish_dir: ./matrix-sdk-android/build/dokka/html
+diff --git a/.github/workflows/gradle-wrapper-validation.yml b/.github/workflows/gradle-wrapper-validation.yml
+deleted file mode 100644
+index 2c13615738..0000000000
+--- a/.github/workflows/gradle-wrapper-validation.yml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-name: "Validate Gradle Wrapper"
+-on:
+-  pull_request: { }
+-  push:
+-    branches: [ main, develop ]
+-
+-jobs:
+-  validation:
+-    name: "Validation"
+-    runs-on: ubuntu-latest
+-    # No concurrency required, this is a prerequisite to other actions and should run every time.
+-    steps:
+-      - uses: actions/checkout@v4
+-      - uses: gradle/wrapper-validation-action@v1
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+deleted file mode 100644
+index ef73114455..0000000000
+--- a/.github/workflows/nightly.yml
++++ /dev/null
+@@ -1,48 +0,0 @@
+-name: Build and release nightly APK
+-
+-on:
+-  workflow_dispatch:
+-  schedule:
+-    # Every nights at 4
+-    - cron: "0 4 * * *"
+-
+-env:
+-  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -Dfile.encoding=UTF-8 -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=1g" -Dkotlin.incremental=false -XX:+UseG1GC
+-  CI_GRADLE_ARG_PROPERTIES: --stacktrace -PpreDexEnable=false --max-workers 2 --no-daemon
+-
+-jobs:
+-  nightly:
+-    name: Build and publish nightly Gplay APK to Firebase
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Set up Python 3.8
+-        uses: actions/setup-python@v4
+-        with:
+-          python-version: 3.8
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Install towncrier
+-        run: |
+-          python3 -m pip install towncrier
+-      - name: Prepare changelog file
+-        run: |
+-          mv towncrier.toml towncrier.toml.bak
+-          sed 's/CHANGES\.md/CHANGES_NIGHTLY\.md/' towncrier.toml.bak > towncrier.toml
+-          rm towncrier.toml.bak
+-          yes n | towncrier build --version nightly
+-      - name: Build and upload Gplay Nightly APK
+-        run: |
+-          ./gradlew assembleGplayNightly appDistributionUploadGplayNightly $CI_GRADLE_ARG_PROPERTIES
+-        env:
+-          ELEMENT_ANDROID_NIGHTLY_KEYID: ${{ secrets.ELEMENT_ANDROID_NIGHTLY_KEYID }}
+-          ELEMENT_ANDROID_NIGHTLY_KEYPASSWORD: ${{ secrets.ELEMENT_ANDROID_NIGHTLY_KEYPASSWORD }}
+-          ELEMENT_ANDROID_NIGHTLY_STOREPASSWORD: ${{ secrets.ELEMENT_ANDROID_NIGHTLY_STOREPASSWORD }}
+-          FIREBASE_TOKEN: ${{ secrets.ELEMENT_ANDROID_NIGHTLY_FIREBASE_TOKEN }}
+diff --git a/.github/workflows/post-pr.yml b/.github/workflows/post-pr.yml
+deleted file mode 100644
+index ab0d0da9ba..0000000000
+--- a/.github/workflows/post-pr.yml
++++ /dev/null
+@@ -1,103 +0,0 @@
+-name: Integration Tests
+-
+-# This runs for all closed pull requests against main, including those closed without merge.
+-# Further filtering occurs in 'should-i-run'
+-
+-on:
+-  pull_request:
+-    types: [closed]
+-    branches: [develop]
+-
+-# Enrich gradle.properties for CI/CD
+-env:
+-  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx3072m -Dfile.encoding=UTF-8 -XX:+HeapDumpOnOutOfMemoryError" -Dkotlin.daemon.jvm.options="-Xmx2560m" -Dkotlin.incremental=false
+-  CI_GRADLE_ARG_PROPERTIES: --stacktrace -PpreDexEnable=false --max-workers 2 --no-daemon
+-
+-jobs:
+-
+-  # More info on should-i-run:
+-  # If this fails to run (the IF doesn't complete) then the needs will not be satisfied for any of the
+-  # other jobs below, so none will run.
+-  # except for the notification job at the bottom which will run all the time, unless should-i-run isn't
+-  # successful, or all the other jobs have succeeded
+-
+-  should-i-run:
+-    name: Check if PR is suitable for analysis
+-    runs-on: ubuntu-latest
+-    if: github.event.pull_request.merged # Additionally require PR to have been completely merged.
+-    steps:
+-      - run: echo "Run those tests!" # no-op success
+-
+-  ui-tests:
+-    name: UI Tests (Synapse)
+-    needs: should-i-run
+-    runs-on: ubuntu-22.04
+-    timeout-minutes: 90 # We might need to increase it if the time for tests grows
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        api-level: [ 28 ]
+-    # No concurrency required, runs every time on a schedule.
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Set up Python 3.8
+-        uses: actions/setup-python@v4
+-        with:
+-          python-version: 3.8
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Start synapse server
+-        uses: michaelkaye/setup-matrix-synapse@v1.0.5
+-        with:
+-          uploadLogs: true
+-          httpPort: 8080
+-          disableRateLimiting: true
+-          public_baseurl: "http://10.0.2.2:8080/"
+-      - name: Run sanity tests on API ${{ matrix.api-level }}
+-        uses: reactivecircus/android-emulator-runner@v2
+-        with:
+-          api-level: ${{ matrix.api-level }}
+-          arch: x86
+-          profile: Nexus 5X
+-          force-avd-creation: false
+-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+-          emulator-build: 7425822  # workaround to emulator bug: https://github.com/ReactiveCircus/android-emulator-runner/issues/160
+-          script: |
+-            adb root
+-            adb logcat -c
+-            touch emulator.log
+-            chmod 777 emulator.log
+-            adb logcat >> emulator.log &
+-            ./gradlew $CI_GRADLE_ARG_PROPERTIES connectedGplayDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=im.vector.app.ui.UiAllScreensSanityTest || (adb pull storage/emulated/0/Pictures/failure_screenshots && exit 1 )
+-      - name: Upload Test Report Log
+-        uses: actions/upload-artifact@v4
+-        if: always()
+-        with:
+-          name: uitest-error-results
+-          path: |
+-            emulator.log
+-            failure_screenshots/
+-
+-# Notify the channel about delayed failures
+-  notify:
+-    name: Notify matrix
+-    runs-on: ubuntu-latest
+-    needs:
+-      - should-i-run
+-      - ui-tests
+-    if: always() && (needs.should-i-run.result == 'success' ) && (needs.ui-tests.result != 'success')
+-    # No concurrency required, runs every time on a schedule.
+-    steps:
+-      - uses: michaelkaye/matrix-hookshot-action@v1.0.0
+-        with:
+-          github_token: ${{ secrets.GITHUB_TOKEN }}
+-          hookshot_url: ${{ secrets.ELEMENT_ANDROID_HOOKSHOT_URL }}
+-          text_template: "Post-merge validation of ${{ github.head_ref }} into ${{ github.base_ref }} by ${{ github.event.pull_request.merged_by.login }} failed: {{#each job_statuses }}{{#with this }}{{#if completed }}  {{name}} {{conclusion}} at {{completed_at}}, {{/if}}{{/with}}{{/each}}"
+-          html_template: "Post-merge validation of ${{ github.head_ref }} into ${{ github.base_ref }} by ${{ github.event.pull_request.merged_by.login }} failed: {{#each job_statuses }}{{#with this }}{{#if completed }}<br />{{icon conclusion}} {{name}} <font color='{{color conclusion}}'>{{conclusion}} at {{completed_at}} <a href=\"{{html_url}}\">[details]</a></font>{{/if}}{{/with}}{{/each}}"
+diff --git a/.github/workflows/quality.yml b/.github/workflows/quality.yml
+deleted file mode 100644
+index d821c36971..0000000000
+--- a/.github/workflows/quality.yml
++++ /dev/null
+@@ -1,121 +0,0 @@
+-name: Code Quality Checks
+-
+-on:
+-  pull_request: { }
+-  push:
+-    branches: [ main, develop ]
+-
+-# Enrich gradle.properties for CI/CD
+-env:
+-  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx3072m -Dfile.encoding=UTF-8 -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=1g" -Dkotlin.daemon.jvm.options="-Xmx2560m" -Dkotlin.incremental=false
+-  CI_GRADLE_ARG_PROPERTIES: --stacktrace -PpreDexEnable=false --max-workers 2 --no-daemon
+-
+-jobs:
+-  check:
+-    name: Project Check Suite
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Run code quality check suite
+-        run: ./tools/check/check_code_quality.sh
+-
+-  # Knit for all the modules (https://github.com/Kotlin/kotlinx-knit)
+-  knit:
+-    name: Knit
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Run knit
+-        run: |
+-          ./gradlew knitCheck $CI_GRADLE_ARG_PROPERTIES
+-
+-  # Check the project: ktlint, detekt, lint
+-  lint:
+-    name: Android Linter
+-    runs-on: ubuntu-latest
+-    # Allow all jobs on main and develop. Just one per PR.
+-    concurrency:
+-      group: ${{ github.ref == 'refs/heads/main' && format('lint-main-{0}', github.sha) || github.ref == 'refs/heads/develop' && format('lint-develop-{0}', github.sha) || format('lint-{0}', github.ref) }}
+-      cancel-in-progress: true
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Run ktlint
+-        run: |
+-          ./gradlew ktlintCheck $CI_GRADLE_ARG_PROPERTIES --continue
+-      - name: Run detekt
+-        if: always()
+-        run: |
+-          ./gradlew detekt $CI_GRADLE_ARG_PROPERTIES
+-      - name: Run lint
+-        # Not always, if ktlint or detekt fail, avoid running the long lint check.
+-        run: |
+-          ./gradlew vector-app:lintGplayRelease $CI_GRADLE_ARG_PROPERTIES
+-          ./gradlew vector-app:lintFdroidRelease $CI_GRADLE_ARG_PROPERTIES
+-      - name: Upload reports
+-        if: always()
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: linting-report
+-          path: |
+-            */build/reports/**/*.*
+-      - name: Prepare Danger
+-        if: always()
+-        run: |
+-          npm install --save-dev @babel/core
+-          npm install --save-dev @babel/plugin-transform-flow-strip-types
+-          yarn add danger-plugin-lint-report --dev
+-      - name: Danger lint
+-        if: always()
+-        uses: danger/danger-js@11.2.6
+-        with:
+-          args: "--dangerfile ./tools/danger/dangerfile-lint.js"
+-        env:
+-          DANGER_GITHUB_API_TOKEN: ${{ secrets.DANGER_GITHUB_API_TOKEN }}
+-          # Fallback for forks
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-
+-  # Gradle dependency analysis using https://github.com/autonomousapps/dependency-analysis-android-gradle-plugin
+-  dependency-analysis:
+-    name: Dependency analysis
+-    runs-on: ubuntu-latest
+-    # Allow all jobs on main and develop. Just one per PR.
+-    concurrency:
+-      group: ${{ github.ref == 'refs/heads/main' && format('dep-main-{0}', github.sha) || github.ref == 'refs/heads/develop' && format('dep-develop-{0}', github.sha) || format('dep-{0}', github.ref) }}
+-      cancel-in-progress: true
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-      - name: Dependency analysis
+-        run: ./gradlew dependencyCheckAnalyze $CI_GRADLE_ARG_PROPERTIES
+-      - name: Upload dependency analysis
+-        if: always()
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: dependency-analysis
+-          path: build/reports/dependency-check-report.html
+diff --git a/.github/workflows/sync-from-external-sources.yml b/.github/workflows/sync-from-external-sources.yml
+deleted file mode 100644
+index 40dd71c3b0..0000000000
+--- a/.github/workflows/sync-from-external-sources.yml
++++ /dev/null
+@@ -1,60 +0,0 @@
+-name: Sync Data From External Sources
+-on:
+-  workflow_dispatch:
+-  schedule:
+-    # At 00:00 on every Monday UTC
+-    - cron: '0 0 * * 1'
+-
+-jobs:
+-  sync-emojis:
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: github.repository == 'element-hq/element-android'
+-    # No concurrency required, runs every time on a schedule.
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Set up Python 3.8
+-        uses: actions/setup-python@v4
+-        with:
+-          python-version: 3.8
+-      - name: Install Prerequisite dependencies
+-        run: |
+-          pip install BeautifulSoup4
+-          pip install requests
+-      - name: Run Emoji script
+-        run: ./tools/import_emojis.py
+-      - name: Create Pull Request for Emojis
+-        uses: peter-evans/create-pull-request@v5
+-        with:
+-          commit-message: Sync Emojis
+-          title: Sync Emojis
+-          body: |
+-            - Update Emojis from Unicode.org
+-          branch: sync-emojis
+-          base: develop
+-
+-  sync-sas-strings:
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: github.repository == 'element-hq/element-android'
+-    # No concurrency required, runs every time on a schedule.
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Set up Python 3.8
+-        uses: actions/setup-python@v4
+-        with:
+-          python-version: 3.8
+-      - name: Install Prerequisite dependencies
+-        run: |
+-          pip install requests
+-      - name: Run SAS String script
+-        run: ./tools/import_sas_strings.py
+-      - name: Create Pull Request for SAS Strings
+-        uses: peter-evans/create-pull-request@v5
+-        with:
+-          commit-message: Sync SAS Strings
+-          title: Sync SAS Strings
+-          body: |
+-            - Update SAS Strings from matrix-doc.
+-          branch: sync-sas-strings
+-          base: develop
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+deleted file mode 100644
+index d090d80513..0000000000
+--- a/.github/workflows/tests.yml
++++ /dev/null
+@@ -1,149 +0,0 @@
+-name: Test
+-
+-on:
+-  workflow_dispatch:
+-
+-# Enrich gradle.properties for CI/CD
+-env:
+-  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx3072m -Dfile.encoding=UTF-8 -XX:+HeapDumpOnOutOfMemoryError" -Dkotlin.daemon.jvm.options="-Xmx2560m" -Dkotlin.incremental=false
+-  CI_GRADLE_ARG_PROPERTIES: --stacktrace -PpreDexEnable=false --max-workers 4 --no-daemon
+-
+-jobs:
+-  tests:
+-    name: Runs all tests
+-    runs-on: ubuntu-22.04
+-    timeout-minutes: 90 # We might need to increase it if the time for tests grows
+-    strategy:
+-      matrix:
+-        api-level: [28]
+-    # Allow all jobs on main and develop. Just one per PR.
+-    concurrency:
+-      group: ${{ github.ref == 'refs/heads/main' && format('unit-tests-main-{0}', github.sha) || github.ref == 'refs/heads/develop' && format('unit-tests-develop-{0}', github.sha) || format('unit-tests-{0}', github.ref) }}
+-      cancel-in-progress: true
+-    steps:
+-      - uses: actions/checkout@v4
+-        with:
+-          lfs: true
+-          fetch-depth: 0
+-      - name: Use JDK 21
+-        uses: actions/setup-java@v4
+-        with:
+-          distribution: 'temurin' # See 'Supported distributions' for available options
+-          java-version: '21'
+-      - name: Configure gradle
+-        uses: gradle/actions/setup-gradle@v3
+-        with:
+-          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-          gradle-home-cache-cleanup: ${{ github.ref == 'refs/heads/develop' }}
+-
+-      - name: Run screenshot tests
+-        run: ./gradlew verifyScreenshots $CI_GRADLE_ARG_PROPERTIES
+-
+-      - name: Archive Screenshot Results on Error
+-        if: failure()
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: screenshot-results
+-          path: |
+-            **/out/failures/
+-            **/build/reports/tests/*UnitTest/
+-
+-      - uses: actions/setup-python@v4
+-        with:
+-          python-version: 3.8
+-      - uses: michaelkaye/setup-matrix-synapse@v1.0.5
+-        with:
+-          uploadLogs: true
+-          httpPort: 8080
+-          disableRateLimiting: true
+-          public_baseurl: "http://10.0.2.2:8080/"
+-
+-      - name: Run all the codecoverage tests at once
+-        uses: reactivecircus/android-emulator-runner@v2
+-        # continue-on-error: true
+-        with:
+-          api-level: ${{ matrix.api-level }}
+-          arch: x86
+-          profile: Nexus 5X
+-          target: playstore
+-          force-avd-creation: false
+-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+-          disable-animations: true
+-          # emulator-build: 7425822
+-          script: |
+-            ./gradlew gatherGplayDebugStringTemplates $CI_GRADLE_ARG_PROPERTIES
+-            ./gradlew unitTestsWithCoverage $CI_GRADLE_ARG_PROPERTIES
+-            ./gradlew instrumentationTestsWithCoverage $CI_GRADLE_ARG_PROPERTIES
+-            ./gradlew generateCoverageReport $CI_GRADLE_ARG_PROPERTIES
+-      # NB: continue-on-error marks steps.tests.conclusion = 'success' but leaves steps.tests.outcome = 'failure'
+-      ### - name: Run all the codecoverage tests at once (retry if emulator failed)
+-      ###   uses: reactivecircus/android-emulator-runner@v2
+-      ###   if: always() && steps.tests.outcome == 'failure' # don't run if previous step succeeded.
+-      ###   with:
+-      ###     api-level: 28
+-      ###     arch: x86
+-      ###     profile: Nexus 5X
+-      ###     force-avd-creation: false
+-      ###     emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+-      ###     disable-animations: true
+-      ###     emulator-build: 7425822
+-      ###     script: |
+-      ###       ./gradlew gatherGplayDebugStringTemplates $CI_GRADLE_ARG_PROPERTIES
+-      ###       ./gradlew unitTestsWithCoverage $CI_GRADLE_ARG_PROPERTIES
+-      ###       ./gradlew instrumentationTestsWithCoverage $CI_GRADLE_ARG_PROPERTIES
+-      ###       ./gradlew generateCoverageReport $CI_GRADLE_ARG_PROPERTIES
+-
+-      - name: Upload Integration Test Report Log
+-        uses: actions/upload-artifact@v4
+-        if: always()
+-        with:
+-          name: integration-test-error-results
+-          path: |
+-            */build/outputs/androidTest-results/connected/
+-            */build/reports/androidTests/connected/
+-
+-      # we may have failed a previous step and retried, that's OK
+-      - name: Publish results to Sonar
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.SONARQUBE_GITHUB_API_TOKEN }}  # Needed to get PR information, if any
+-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+-          ORG_GRADLE_PROJECT_SONAR_LOGIN: ${{ secrets.SONAR_TOKEN }}
+-        if: ${{ always() && env.GITHUB_TOKEN != '' && env.SONAR_TOKEN != '' && env.ORG_GRADLE_PROJECT_SONAR_LOGIN != '' }}
+-        run: ./gradlew sonar $CI_GRADLE_ARG_PROPERTIES
+-
+-      - name: Format unit test results
+-        if: always()
+-        run: python3 ./tools/ci/render_test_output.py unit ./**/build/test-results/**/*.xml
+-
+-# can't be run on macos due to containers.
+-#      - name: Publish Unit Test Results
+-#        uses: EnricoMi/publish-unit-test-result-action@v1
+-#        if: always() &&
+-#          github.event.sender.login != 'dependabot[bot]' &&
+-#          ( github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository )
+-#        with:
+-#          files: ./**/build/test-results/**/*.xml
+-
+-# Unneeded as part of the test suite above, kept around in case we want to re-enable them.
+-#
+-#  # Build Android Tests
+-#  build-android-tests:
+-#    name: Build Android Tests
+-#    runs-on: ubuntu-latest
+-#    concurrency:
+-#      group: ${{ github.ref == 'refs/heads/main' && format('unit-tests-main-{0}', github.sha) || github.ref == 'refs/heads/develop' && format('unit-tests-develop-{0}', github.sha) || format('build-android-tests-{0}', github.ref) }}
+-#      cancel-in-progress: true
+-#    steps:
+-#      - uses: actions/checkout@v4
+-#      - name: Use JDK 21
+-#        uses: actions/setup-java@v4
+-#        with:
+-#          distribution: 'temurin' # See 'Supported distributions' for available options
+-#          java-version: '21'
+-#      - name: Configure gradle
+-#        uses: gradle/actions/setup-gradle@v3
+-#        with:
+-#          cache-read-only: ${{ github.ref != 'refs/heads/develop' }}
+-#      - name: Build Android Tests
+-#        run: ./gradlew clean assembleAndroidTest $CI_GRADLE_ARG_PROPERTIES
+-
+diff --git a/.github/workflows/triage-labelled.yml b/.github/workflows/triage-labelled.yml
+deleted file mode 100644
+index c5a37d3eaf..0000000000
+--- a/.github/workflows/triage-labelled.yml
++++ /dev/null
+@@ -1,79 +0,0 @@
+-name: Move labelled issues to correct boards and columns
+-
+-on:
+-  issues:
+-    types: [labeled]
+-
+-jobs:
+-  apply_Z-Labs_label:
+-    name: Add Z-Labs label for features behind labs flags
+-    runs-on: ubuntu-latest
+-    if: >
+-      contains(github.event.issue.labels.*.name, 'A-Maths') ||
+-      contains(github.event.issue.labels.*.name, 'A-Message-Pinning') ||
+-      contains(github.event.issue.labels.*.name, 'A-Polls') ||
+-      contains(github.event.issue.labels.*.name, 'A-Location-Sharing') ||
+-      contains(github.event.issue.labels.*.name, 'A-Message-Bubbles') ||
+-      contains(github.event.issue.labels.*.name, 'Z-IA') ||
+-      contains(github.event.issue.labels.*.name, 'A-Themes-Custom') ||
+-      contains(github.event.issue.labels.*.name, 'A-E2EE-Dehydration') ||
+-      contains(github.event.issue.labels.*.name, 'A-Tags') ||
+-      contains(github.event.issue.labels.*.name, 'A-Rich-Text-Editor')
+-    steps:
+-      - uses: actions/github-script@v5
+-        with:
+-          script: |
+-            github.rest.issues.addLabels({
+-              issue_number: context.issue.number,
+-              owner: context.repo.owner,
+-              repo: context.repo.repo,
+-              labels: ['Z-Labs']
+-            })
+-
+-  apply_Help-Wanted_label:
+-    name: Add "Help Wanted" label to all "good first issue" and Hacktoberfest
+-    runs-on: ubuntu-latest
+-    if: >
+-      contains(github.event.issue.labels.*.name, 'good first issue') ||
+-      contains(github.event.issue.labels.*.name, 'Hacktoberfest')
+-    steps:
+-      - uses: actions/github-script@v5
+-        with:
+-          script: |
+-            github.rest.issues.addLabels({
+-              issue_number: context.issue.number,
+-              owner: context.repo.owner,
+-              repo: context.repo.repo,
+-              labels: ['Help Wanted']
+-            })
+-
+-  add_design_issues_to_project:
+-    name: X-Needs-Design to Design project board
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: >
+-      github.repository == 'element-hq/element-android' &&
+-      contains(github.event.issue.labels.*.name, 'X-Needs-Design') &&
+-      (contains(github.event.issue.labels.*.name, 'S-Critical') &&
+-       (contains(github.event.issue.labels.*.name, 'O-Frequent') ||
+-        contains(github.event.issue.labels.*.name, 'O-Occasional')) ||
+-       (contains(github.event.issue.labels.*.name, 'S-Major') &&
+-        contains(github.event.issue.labels.*.name, 'O-Frequent')) ||
+-       contains(github.event.issue.labels.*.name, 'A11y'))
+-    steps:
+-      - uses: actions/add-to-project@main
+-        with:
+-          project-url: https://github.com/orgs/element-hq/projects/18
+-          github-token: ${{ secrets.ELEMENT_BOT_TOKEN }}
+-
+-  add_product_issues:
+-    name: X-Needs-Product to Product project board
+-    runs-on: ubuntu-latest
+-    if: >
+-      contains(github.event.issue.labels.*.name, 'X-Needs-Product')
+-    steps:
+-      - uses: actions/add-to-project@main
+-        with:
+-          project-url: https://github.com/orgs/element-hq/projects/28
+-          github-token: ${{ secrets.ELEMENT_BOT_TOKEN }}
+-
+diff --git a/.github/workflows/triage-move-review-requests.yml b/.github/workflows/triage-move-review-requests.yml
+deleted file mode 100644
+index 7299f74f00..0000000000
+--- a/.github/workflows/triage-move-review-requests.yml
++++ /dev/null
+@@ -1,143 +0,0 @@
+-name: Move pull requests asking for review to the relevant project
+-on:
+-  pull_request_target:
+-    types: [review_requested]
+-
+-jobs:
+-  add_design_pr_to_project:
+-    name: Move PRs asking for design review to the design board
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: github.repository == 'element-hq/element-android'
+-    steps:
+-      - uses: octokit/graphql-action@v2.x
+-        id: find_team_members
+-        with:
+-          headers: '{"GraphQL-Features": "projects_next_graphql"}'
+-          query: |
+-            query find_team_members($team: String!) {
+-              organization(login: "element-hq") {
+-                team(slug: $team) {
+-                  members {
+-                    nodes {
+-                      login
+-                    }
+-                  }
+-                }
+-              }
+-            }
+-          team: ${{ env.TEAM }}
+-        env:
+-          TEAM: "design"
+-          GITHUB_TOKEN: ${{ secrets.ELEMENT_BOT_TOKEN }}
+-      - id: any_matching_reviewers
+-        run: |
+-          # Fetch requested reviewers, and people who are on the team
+-          echo '${{ tojson(fromjson(steps.find_team_members.outputs.data).organization.team.members.nodes[*].login) }}' | tee /tmp/team_members.json
+-          echo '${{ tojson(github.event.pull_request.requested_reviewers[*].login) }}' | tee /tmp/reviewers.json
+-          jq --raw-output .[] < /tmp/team_members.json | sort | tee /tmp/team_members.txt
+-          jq --raw-output .[] < /tmp/reviewers.json | sort | tee /tmp/reviewers.txt
+-
+-          # Fetch requested team reviewers, and the name of the team
+-          echo '${{ tojson(github.event.pull_request.requested_teams[*].slug) }}' | tee /tmp/team_reviewers.json
+-          jq --raw-output .[] < /tmp/team_reviewers.json | sort | tee /tmp/team_reviewers.txt
+-          echo '${{ env.TEAM }}' | tee /tmp/team.txt
+-
+-          # If either a reviewer matches a team member, or a team matches our team, say "true"
+-          if [ $(join /tmp/team_members.txt /tmp/reviewers.txt | wc -l) != 0 ]; then
+-            echo "::set-output name=match::true"
+-          elif [ $(join /tmp/team.txt /tmp/team_reviewers.txt | wc -l) != 0 ]; then
+-            echo "::set-output name=match::true"
+-          else
+-            echo "::set-output name=match::false"
+-          fi
+-        env:
+-          TEAM: "design"
+-      - uses: octokit/graphql-action@v2.x
+-        id: add_to_project
+-        if: steps.any_matching_reviewers.outputs.match == 'true'
+-        with:
+-          headers: '{"GraphQL-Features": "projects_next_graphql"}'
+-          query: |
+-            mutation add_to_project($projectid:ID!, $contentid:ID!) {
+-              addProjectV2ItemById(input: {projectId: $projectid contentId: $contentid}) {
+-                item {
+-                  id
+-                }
+-              }
+-            }
+-          projectid: ${{ env.PROJECT_ID }}
+-          contentid: ${{ github.event.pull_request.node_id }}
+-        env:
+-          PROJECT_ID: "PVT_kwDOAM0swc0sUA"
+-          TEAM: "design"
+-          GITHUB_TOKEN: ${{ secrets.ELEMENT_BOT_TOKEN }}
+-
+-  add_product_pr_to_project:
+-    name: Move PRs asking for product review to the product board
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: github.repository == 'element-hq/element-android'
+-    steps:
+-      - uses: octokit/graphql-action@v2.x
+-        id: find_team_members
+-        with:
+-          headers: '{"GraphQL-Features": "projects_next_graphql"}'
+-          query: |
+-            query find_team_members($team: String!) {
+-              organization(login: "element-hq") {
+-                team(slug: $team) {
+-                  members {
+-                    nodes {
+-                      login
+-                    }
+-                  }
+-                }
+-              }
+-            }
+-          team: ${{ env.TEAM }}
+-        env:
+-          TEAM: "product"
+-          GITHUB_TOKEN: ${{ secrets.ELEMENT_BOT_TOKEN }}
+-      - id: any_matching_reviewers
+-        run: |
+-          # Fetch requested reviewers, and people who are on the team
+-          echo '${{ tojson(fromjson(steps.find_team_members.outputs.data).organization.team.members.nodes[*].login) }}' | tee /tmp/team_members.json
+-          echo '${{ tojson(github.event.pull_request.requested_reviewers[*].login) }}' | tee /tmp/reviewers.json
+-          jq --raw-output .[] < /tmp/team_members.json | sort | tee /tmp/team_members.txt
+-          jq --raw-output .[] < /tmp/reviewers.json | sort | tee /tmp/reviewers.txt
+-
+-          # Fetch requested team reviewers, and the name of the team
+-          echo '${{ tojson(github.event.pull_request.requested_teams[*].slug) }}' | tee /tmp/team_reviewers.json
+-          jq --raw-output .[] < /tmp/team_reviewers.json | sort | tee /tmp/team_reviewers.txt
+-          echo '${{ env.TEAM }}' | tee /tmp/team.txt
+-
+-          # If either a reviewer matches a team member, or a team matches our team, say "true"
+-          if [ $(join /tmp/team_members.txt /tmp/reviewers.txt | wc -l) != 0 ]; then
+-            echo "::set-output name=match::true"
+-          elif [ $(join /tmp/team.txt /tmp/team_reviewers.txt | wc -l) != 0 ]; then
+-            echo "::set-output name=match::true"
+-          else
+-            echo "::set-output name=match::false"
+-          fi
+-        env:
+-          TEAM: "product"
+-      - uses: octokit/graphql-action@v2.x
+-        id: add_to_project
+-        if: steps.any_matching_reviewers.outputs.match == 'true'
+-        with:
+-          headers: '{"GraphQL-Features": "projects_next_graphql"}'
+-          query: |
+-            mutation add_to_project($projectid:ID!, $contentid:ID!) {
+-              addProjectV2ItemById(input: {projectId: $projectid contentId: $contentid}) {
+-                item {
+-                  id
+-                }
+-              }
+-            }
+-          projectid: ${{ env.PROJECT_ID }}
+-          contentid: ${{ github.event.pull_request.node_id }}
+-        env:
+-          PROJECT_ID: "PVT_kwDOAM0swc4AAg6N"
+-          TEAM: "product"
+-          GITHUB_TOKEN: ${{ secrets.ELEMENT_BOT_TOKEN }}
+diff --git a/.github/workflows/triage-priority-bugs.yml b/.github/workflows/triage-priority-bugs.yml
+deleted file mode 100644
+index 3e1093b578..0000000000
+--- a/.github/workflows/triage-priority-bugs.yml
++++ /dev/null
+@@ -1,57 +0,0 @@
+-name: Move P1 bugs to boards
+-
+-on:
+-  issues:
+-    types: [labeled, unlabeled]
+-
+-jobs:
+-  p1_issues_to_team_workboard:
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: >
+-      github.repository == 'element-hq/element-android' &&
+-      (!contains(github.event.issue.labels.*.name, 'A-E2EE') &&
+-        !contains(github.event.issue.labels.*.name, 'A-E2EE-Cross-Signing') &&
+-        !contains(github.event.issue.labels.*.name, 'A-E2EE-Dehydration') &&
+-        !contains(github.event.issue.labels.*.name, 'A-E2EE-Key-Backup') &&
+-        !contains(github.event.issue.labels.*.name, 'A-E2EE-SAS-Verification')) &&
+-      (contains(github.event.issue.labels.*.name, 'T-Defect') &&
+-        contains(github.event.issue.labels.*.name, 'S-Critical') &&
+-        (contains(github.event.issue.labels.*.name, 'O-Frequent') ||
+-          contains(github.event.issue.labels.*.name, 'O-Occasional')) ||
+-        contains(github.event.issue.labels.*.name, 'S-Major') &&
+-        contains(github.event.issue.labels.*.name, 'O-Frequent') ||
+-        contains(github.event.issue.labels.*.name, 'A11y') &&
+-        contains(github.event.issue.labels.*.name, 'O-Frequent'))
+-    steps:
+-      - uses: alex-page/github-project-automation-plus@7ffb872c64bd809d23563a130a0a97d01dfa8f43
+-        with:
+-          project: Android App Team
+-          column: Important Issues & Topics (P1)
+-          repo-token: ${{ secrets.ELEMENT_BOT_TOKEN }}
+-
+-  P1_issues_to_crypto_team_workboard:
+-    runs-on: ubuntu-latest
+-    # Skip in forks
+-    if: >
+-      github.repository == 'element-hq/element-android' &&
+-      (contains(github.event.issue.labels.*.name, 'Z-UISI') ||
+-        (contains(github.event.issue.labels.*.name, 'A-E2EE') ||
+-        contains(github.event.issue.labels.*.name, 'A-E2EE-Cross-Signing') ||
+-        contains(github.event.issue.labels.*.name, 'A-E2EE-Dehydration') ||
+-        contains(github.event.issue.labels.*.name, 'A-E2EE-Key-Backup') ||
+-        contains(github.event.issue.labels.*.name, 'A-E2EE-SAS-Verification')) &&
+-      (contains(github.event.issue.labels.*.name, 'T-Defect') &&
+-        contains(github.event.issue.labels.*.name, 'S-Critical') &&
+-        (contains(github.event.issue.labels.*.name, 'O-Frequent') ||
+-          contains(github.event.issue.labels.*.name, 'O-Occasional')) ||
+-        contains(github.event.issue.labels.*.name, 'S-Major') &&
+-        contains(github.event.issue.labels.*.name, 'O-Frequent') ||
+-        contains(github.event.issue.labels.*.name, 'A11y') &&
+-        contains(github.event.issue.labels.*.name, 'O-Frequent')))
+-    steps:
+-      - uses: alex-page/github-project-automation-plus@7ffb872c64bd809d23563a130a0a97d01dfa8f43
+-        with:
+-          project: Crypto Team
+-          column: Ready
+-          repo-token: ${{ secrets.ELEMENT_BOT_TOKEN }}
+diff --git a/.github/workflows/update-gradle-wrapper.yml b/.github/workflows/update-gradle-wrapper.yml
+deleted file mode 100644
+index cb6f9e1c2c..0000000000
+--- a/.github/workflows/update-gradle-wrapper.yml
++++ /dev/null
+@@ -1,20 +0,0 @@
+-name: Update Gradle Wrapper
+-
+-on:
+-  schedule:
+-    - cron: "0 0 * * *"
+-
+-jobs:
+-  update-gradle-wrapper:
+-    runs-on: ubuntu-latest
+-
+-    steps:
+-      - uses: actions/checkout@v4
+-
+-      - name: Update Gradle Wrapper
+-        uses: gradle-update/update-gradle-wrapper-action@v1
+-        # Skip in forks
+-        if: github.repository == 'element-hq/element-android'
+-        with:
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-          target-branch: develop
+diff --git a/.github/workflows/validate-lfs.yml b/.github/workflows/validate-lfs.yml
+deleted file mode 100644
+index c52e3e4f6a..0000000000
+--- a/.github/workflows/validate-lfs.yml
++++ /dev/null
+@@ -1,15 +0,0 @@
+-name: Validate Git LFS
+-
+-on: [pull_request]
+-
+-jobs:
+-  build:
+-    runs-on: ubuntu-latest
+-    name: Validate
+-    steps:
+-      - uses: actions/checkout@v4
+-        with:
+-          lfs: 'true'
+-
+-      - run: |
+-          ./tools/validate_lfs.sh
+-- 
+2.39.5 (Apple Git-154)
+
