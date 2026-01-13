@@ -1,0 +1,21 @@
+From cb7ec27a62c9532ab31b9f861d6c0da40c814121 Mon Sep 17 00:00:00 2001
+From: LukaRusadze <rusadzeluka@gmail.com>
+Date: Tue, 13 Jan 2026 14:10:52 +0400
+Subject: [PATCH 2/5] Add jitpack.yml for JDK 17 builds
+
+---
+ jitpack.yml | 2 ++
+ 1 file changed, 2 insertions(+)
+ create mode 100644 jitpack.yml
+
+diff --git a/jitpack.yml b/jitpack.yml
+new file mode 100644
+index 0000000000..efde7bf258
+--- /dev/null
++++ b/jitpack.yml
+@@ -0,0 +1,2 @@
++jdk:
++  - openjdk17
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,28 @@
+From 372b1df2cf6541c93eebbae3e3e001c8e4b6894d Mon Sep 17 00:00:00 2001
+From: LukaRusadze <rusadzeluka@gmail.com>
+Date: Tue, 13 Jan 2026 15:51:26 +0400
+Subject: [PATCH 5/5] Use upstream SDK_VERSION for maven publish version
+
+---
+ matrix-sdk-android/build.gradle | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/matrix-sdk-android/build.gradle b/matrix-sdk-android/build.gradle
+index 6b4eb28f4b..2601a48567 100644
+--- a/matrix-sdk-android/build.gradle
++++ b/matrix-sdk-android/build.gradle
+@@ -11,9 +11,9 @@ afterEvaluate {
+         publications {
+             release(MavenPublication) {
+                 from components.release
+-                groupId = 'com.github.dh-companion.element-android'
++                groupId = 'com.github.dh-companion.matrix-android-sdk2'
+                 artifactId = 'matrix-sdk-android'
+-                version = '1.6.50-crypto0.11.1'
++                version = android.defaultConfig.buildConfigFields.get("SDK_VERSION").value.replace('"', '')
+             }
+         }
+     }
+-- 
+2.39.5 (Apple Git-154)
+

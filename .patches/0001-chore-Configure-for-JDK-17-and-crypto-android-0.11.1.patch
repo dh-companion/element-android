@@ -1,0 +1,91 @@
+From 3805eb5ce48b59fa2857d38ebc6995aea35554ed Mon Sep 17 00:00:00 2001
+From: LukaRusadze <rusadzeluka@gmail.com>
+Date: Tue, 13 Jan 2026 14:07:46 +0400
+Subject: [PATCH 1/5] chore: Configure for JDK 17 and crypto-android 0.11.1
+
+- Update JVM target from 21 to 17 for Expo SDK 54 compatibility
+- Remove deprecated MaxPermSize JVM option
+- Add maven-publish plugin for JitPack publishing
+- Add kotlinOptions to realmfieldnameshelper module
+---
+ dependencies.gradle                                |  6 +++---
+ gradle.properties                                  |  2 +-
+ .../external/realmfieldnameshelper/build.gradle    |  6 ++++++
+ matrix-sdk-android/build.gradle                    | 14 ++++++++++++++
+ 4 files changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/dependencies.gradle b/dependencies.gradle
+index d3e839a118..6aaa4f5d76 100644
+--- a/dependencies.gradle
++++ b/dependencies.gradle
+@@ -2,9 +2,9 @@ ext.versions = [
+         'minSdk'            : 21,
+         'compileSdk'        : 35,
+         'targetSdk'         : 35,
+-        'sourceCompat'      : JavaVersion.VERSION_21,
+-        'targetCompat'      : JavaVersion.VERSION_21,
+-        'jvmTarget'         : "21",
++        'sourceCompat'      : JavaVersion.VERSION_17,
++        'targetCompat'      : JavaVersion.VERSION_17,
++        'jvmTarget'         : "17",
+ ]
+ 
+ def gradle = "8.11.0"
+diff --git a/gradle.properties b/gradle.properties
+index 2433ae78cb..ff2334305b 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -8,7 +8,7 @@
+ # The setting is particularly useful for tweaking memory settings.
+ 
+ # Build Time Optimizations
+-org.gradle.jvmargs=-Xmx4g -Xms512M -XX:MaxPermSize=2048m -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8 -XX:+UseParallelGC
++org.gradle.jvmargs=-Xmx4g -Xms512M -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8 -XX:+UseParallelGC
+ org.gradle.configureondemand=true
+ org.gradle.parallel=true
+ org.gradle.vfs.watch=true
+diff --git a/library/external/realmfieldnameshelper/build.gradle b/library/external/realmfieldnameshelper/build.gradle
+index ab828f7d70..833151a3a6 100644
+--- a/library/external/realmfieldnameshelper/build.gradle
++++ b/library/external/realmfieldnameshelper/build.gradle
+@@ -4,6 +4,12 @@ apply plugin: 'java'
+ sourceCompatibility = versions.sourceCompat
+ targetCompatibility = versions.targetCompat
+ 
++compileKotlin {
++    kotlinOptions {
++        jvmTarget = versions.jvmTarget
++    }
++}
++
+ dependencies {
+     implementation 'com.squareup:javapoet:1.13.0'
+ }
+diff --git a/matrix-sdk-android/build.gradle b/matrix-sdk-android/build.gradle
+index 0b7b2015ff..3c1f69e3ca 100644
+--- a/matrix-sdk-android/build.gradle
++++ b/matrix-sdk-android/build.gradle
+@@ -4,6 +4,20 @@ apply plugin: 'kotlin-kapt'
+ apply plugin: 'kotlin-parcelize'
+ apply plugin: 'realm-android'
+ apply plugin: "org.jetbrains.dokka"
++apply plugin: 'maven-publish'
++
++afterEvaluate {
++    publishing {
++        publications {
++            release(MavenPublication) {
++                from components.release
++                groupId = 'org.matrix.android'
++                artifactId = 'matrix-android-sdk2'
++                version = '1.6.50-custom'
++            }
++        }
++    }
++}
+ 
+ if (project.hasProperty("coverage")) {
+     apply plugin: 'jacoco'
+-- 
+2.39.5 (Apple Git-154)
+
