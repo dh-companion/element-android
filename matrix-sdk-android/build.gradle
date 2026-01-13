@@ -4,6 +4,20 @@ apply plugin: 'kotlin-kapt'
 apply plugin: 'kotlin-parcelize'
 apply plugin: 'realm-android'
 apply plugin: "org.jetbrains.dokka"
+apply plugin: 'maven-publish'
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'org.matrix.android'
+                artifactId = 'matrix-android-sdk2'
+                version = '1.6.50-custom'
+            }
+        }
+    }
+}
 
 if (project.hasProperty("coverage")) {
     apply plugin: 'jacoco'
