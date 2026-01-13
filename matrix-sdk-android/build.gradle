@@ -11,9 +11,9 @@ afterEvaluate {
         publications {
             release(MavenPublication) {
                 from components.release
-                groupId = 'org.matrix.android'
-                artifactId = 'matrix-android-sdk2'
-                version = '1.6.50-custom'
+                groupId = 'com.github.dh-companion.element-android'
+                artifactId = 'matrix-sdk-android'
+                version = '1.6.50-crypto0.11.1'
             }
         }
     }
