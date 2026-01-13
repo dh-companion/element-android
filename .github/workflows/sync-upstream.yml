@@ -1,0 +1,101 @@
+name: Sync upstream releases
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 8am UTC
+  workflow_dispatch:      # Manual trigger
+    inputs:
+      force_version:
+        description: 'Force sync specific version (e.g., v1.6.48). Leave empty to auto-detect new releases.'
+        required: false
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/element-hq/element-android.git
+
+      - name: Fetch upstream tags
+        run: git fetch upstream --tags
+
+      - name: Determine version to sync
+        id: version
+        run: |
+          if [ -n "${{ inputs.force_version }}" ]; then
+            echo "version=${{ inputs.force_version }}" >> $GITHUB_OUTPUT
+            echo "Using forced version: ${{ inputs.force_version }}"
+          else
+            # Get latest upstream release tag (even numbers = releases)
+            LATEST=$(git tag -l 'v1.*' --sort=-v:refname | grep -E 'v[0-9]+\.[0-9]+\.[0-9]*[02468]$' | head -1)
+            echo "Latest upstream release: $LATEST"
+
+            # Check if we already have a release branch for this tag
+            if git rev-parse "origin/release/$LATEST" >/dev/null 2>&1; then
+              echo "Already have release/$LATEST"
+              echo "version=" >> $GITHUB_OUTPUT
+            else
+              echo "New release found: $LATEST"
+              echo "version=$LATEST" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Create release branch and apply patches
+        if: steps.version.outputs.version != ''
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          echo "Creating release for $VERSION"
+
+          # Checkout the upstream tag
+          git checkout $VERSION
+
+          # Create release branch
+          git checkout -b release/$VERSION
+
+          # Apply our patches
+          for patch in .patches/*.patch; do
+            echo "Applying $patch"
+            git am --3way "$patch"
+          done
+
+          # Force update the tag to point to our patched version
+          git tag -f $VERSION
+
+          echo "Release branch created with patches applied"
+
+      - name: Push release branch and tag
+        if: steps.version.outputs.version != ''
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          git push origin release/$VERSION
+          git push origin $VERSION --force
+
+      - name: Trigger JitPack build
+        if: steps.version.outputs.version != ''
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          echo "Triggering JitPack build for $VERSION"
+          curl -s "https://jitpack.io/api/builds/com.github.dh-companion/matrix-android-sdk2/$VERSION" || true
+          echo ""
+          echo "Build triggered: https://jitpack.io/#dh-companion/matrix-android-sdk2/$VERSION"
+
+      - name: Summary
+        if: steps.version.outputs.version != ''
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          echo "## Release Synced" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **JitPack:** https://jitpack.io/#dh-companion/matrix-android-sdk2/$VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependency:** \`implementation 'com.github.dh-companion:matrix-android-sdk2:$VERSION'\`" >> $GITHUB_STEP_SUMMARY

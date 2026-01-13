@@ -1,0 +1,22 @@
+From c43d5b3a8b1116b6e6bcc41a9319edc38c2bf8d7 Mon Sep 17 00:00:00 2001
+From: LukaRusadze <rusadzeluka@gmail.com>
+Date: Tue, 13 Jan 2026 15:07:33 +0400
+Subject: [PATCH 3/5] Fix jitpack.yml to only build matrix-sdk-android
+
+---
+ jitpack.yml | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/jitpack.yml b/jitpack.yml
+index efde7bf258..a3f75ba629 100644
+--- a/jitpack.yml
++++ b/jitpack.yml
+@@ -1,2 +1,5 @@
+ jdk:
+   - openjdk17
++
++install:
++  - ./gradlew :matrix-sdk-android:publishToMavenLocal
+-- 
+2.39.5 (Apple Git-154)
+

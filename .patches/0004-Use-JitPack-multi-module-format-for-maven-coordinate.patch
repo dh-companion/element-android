@@ -1,0 +1,29 @@
+From fbf78d4d18fa516f6474b5e1e92520c5ed9b130a Mon Sep 17 00:00:00 2001
+From: LukaRusadze <rusadzeluka@gmail.com>
+Date: Tue, 13 Jan 2026 15:25:04 +0400
+Subject: [PATCH 4/5] Use JitPack multi-module format for maven coordinates
+
+---
+ matrix-sdk-android/build.gradle | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/matrix-sdk-android/build.gradle b/matrix-sdk-android/build.gradle
+index 3c1f69e3ca..6b4eb28f4b 100644
+--- a/matrix-sdk-android/build.gradle
++++ b/matrix-sdk-android/build.gradle
+@@ -11,9 +11,9 @@ afterEvaluate {
+         publications {
+             release(MavenPublication) {
+                 from components.release
+-                groupId = 'org.matrix.android'
+-                artifactId = 'matrix-android-sdk2'
+-                version = '1.6.50-custom'
++                groupId = 'com.github.dh-companion.element-android'
++                artifactId = 'matrix-sdk-android'
++                version = '1.6.50-crypto0.11.1'
+             }
+         }
+     }
+-- 
+2.39.5 (Apple Git-154)
+
