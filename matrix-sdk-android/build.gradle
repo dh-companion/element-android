@@ -175,7 +175,8 @@ dependencies {
 
 
 //    implementation(name: 'crypto-android-release', ext: 'aar')
-    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    // JNA AAR - must match version required by crypto-android (5.14.0)
+    implementation 'net.java.dev.jna:jna:5.14.0@aar'
 
  //   implementation libs.androidx.appCompat
     implementation libs.androidx.core
@@ -235,7 +236,10 @@ dependencies {
 
     implementation libs.google.phonenumber
 
-    implementation("org.matrix.rustcomponents:crypto-android:0.11.1")
+    implementation("org.matrix.rustcomponents:crypto-android:0.11.1") {
+        // Exclude JNA JAR - we declare JNA AAR explicitly above
+        exclude group: 'net.java.dev.jna', module: 'jna'
+    }
 //    api project(":library:rustCrypto")
 
     testImplementation libs.tests.junit
