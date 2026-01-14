@@ -124,6 +124,16 @@ internal class PrepareToEncryptUseCase @Inject constructor(
                 },
                 errorOnVerifiedUserProblem = false,
         )
+        // Debug: Log devices known for each room member before sharing keys
+        roomMembers.forEach { userId ->
+            try {
+                val devices = olmMachine.getUserDevices(userId)
+                Timber.tag(loggerTag.value).d("🔑 [KeyShare] User $userId has ${devices.size} devices: ${devices.map { "${it.deviceId} (trusted=${it.trustLevel?.isCrossSigningVerified()})" }}")
+            } catch (e: Exception) {
+                Timber.tag(loggerTag.value).e(e, "🔑 [KeyShare] Failed to get devices for $userId")
+            }
+        }
+
         measureTimeMillis {
             keyShareLock.withLock {
                 coroutineScope {
