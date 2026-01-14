@@ -19,6 +19,7 @@ package org.matrix.android.sdk.internal.crypto.dehydration
 import android.util.Base64
 import kotlinx.coroutines.withContext
 import org.matrix.android.sdk.api.MatrixCoroutineDispatchers
+import org.matrix.android.sdk.api.session.crypto.crosssigning.CrossSigningService
 import org.matrix.android.sdk.api.session.securestorage.IntegrityResult
 import org.matrix.android.sdk.api.session.securestorage.KeyInfoResult
 import org.matrix.android.sdk.api.session.securestorage.KeyRef
@@ -49,6 +50,7 @@ internal class DehydrationService @Inject constructor(
         private val olmMachineProvider: Provider<OlmMachine>,
         private val cryptoApi: CryptoApi,
         private val sharedSecretStorageService: SharedSecretStorageService,
+        private val crossSigningServiceProvider: Provider<CrossSigningService>,
         private val coroutineDispatchers: MatrixCoroutineDispatchers,
 ) {
 
@@ -197,12 +199,24 @@ internal class DehydrationService @Inject constructor(
         Timber.d("🔐 [Dehydration] Parsed body, keys: ${body.keys}")
         Timber.d("🔐 [Dehydration] Sending PUT request to create dehydrated device...")
 
+        val deviceId: String
         try {
             val response = cryptoApi.createDehydratedDevice(body)
-            Timber.i("🔐 [Dehydration] PUT request succeeded, device ID: ${response.deviceId}")
+            deviceId = response.deviceId
+            Timber.i("🔐 [Dehydration] PUT request succeeded, device ID: $deviceId")
         } catch (e: Exception) {
             Timber.e(e, "🔐 [Dehydration] PUT request failed")
             throw e
+        }
+
+        // Cross-sign the dehydrated device so other clients will trust it and send room keys to it
+        try {
+            Timber.d("🔐 [Dehydration] Cross-signing dehydrated device $deviceId...")
+            crossSigningServiceProvider.get().trustDevice(deviceId)
+            Timber.i("🔐 [Dehydration] Successfully cross-signed dehydrated device $deviceId")
+        } catch (e: Exception) {
+            Timber.e(e, "🔐 [Dehydration] Failed to cross-sign dehydrated device, it may not receive room keys")
+            // Don't throw - the device was created, it just won't be trusted
         }
     }
 
