@@ -211,6 +211,9 @@ internal class DehydrationService @Inject constructor(
 
         // Cross-sign the dehydrated device so other clients will trust it and send room keys to it
         try {
+            Timber.d("🔐 [Dehydration] Fetching device keys to make dehydrated device known locally...")
+            // Force download our own device keys so the local crypto state knows about the new dehydrated device
+            olmMachine.ensureUsersKeys(listOf(olmMachine.userId()), forceDownload = true)
             Timber.d("🔐 [Dehydration] Cross-signing dehydrated device $deviceId...")
             crossSigningServiceProvider.get().trustDevice(deviceId)
             Timber.i("🔐 [Dehydration] Successfully cross-signed dehydrated device $deviceId")
