@@ -71,6 +71,7 @@ import org.matrix.android.sdk.api.session.sync.model.SyncResponse
 import org.matrix.android.sdk.api.session.sync.model.ToDeviceSyncResponse
 import org.matrix.android.sdk.api.util.Optional
 import org.matrix.android.sdk.api.util.toOptional
+import org.matrix.android.sdk.internal.crypto.dehydration.DehydrationService
 import org.matrix.android.sdk.internal.crypto.keysbackup.RustKeyBackupService
 import org.matrix.android.sdk.internal.crypto.model.SessionInfo
 import org.matrix.android.sdk.internal.crypto.network.OutgoingRequestsProcessor
@@ -135,6 +136,7 @@ internal class RustCryptoService @Inject constructor(
         private val outgoingRequestsProcessor: OutgoingRequestsProcessor,
         private val matrixConfiguration: MatrixConfiguration,
         private val perSessionBackupQueryRateLimiter: PerSessionBackupQueryRateLimiter,
+        private val dehydrationService: DehydrationService,
 ) : CryptoService {
 
     private val isStarting = AtomicBoolean(false)
@@ -295,6 +297,18 @@ internal class RustCryptoService @Inject constructor(
 
     // Always enabled on Matrix Android SDK2
     override fun isCryptoEnabled() = true
+
+    // region Device Dehydration (MSC3814)
+
+    override suspend fun runDeviceDehydrationFlow(privateKeyData: ByteArray) {
+        dehydrationService.runDeviceDehydrationFlow(privateKeyData)
+    }
+
+    override fun isDehydrationAvailable(): Boolean {
+        return dehydrationService.isDehydrationAvailable()
+    }
+
+    // endregion
 
     /**
      * @return the Keys backup Service

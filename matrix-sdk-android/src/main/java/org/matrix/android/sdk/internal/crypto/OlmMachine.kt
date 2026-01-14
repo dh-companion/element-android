@@ -70,6 +70,7 @@ import org.matrix.rustcomponents.sdk.crypto.CrossSigningKeyExport
 import org.matrix.rustcomponents.sdk.crypto.CrossSigningStatus
 import org.matrix.rustcomponents.sdk.crypto.CryptoStoreException
 import org.matrix.rustcomponents.sdk.crypto.DecryptionException
+import org.matrix.rustcomponents.sdk.crypto.DehydratedDevices
 import org.matrix.rustcomponents.sdk.crypto.DeviceLists
 import org.matrix.rustcomponents.sdk.crypto.EncryptionSettings
 import org.matrix.rustcomponents.sdk.crypto.KeyRequestPair
@@ -155,6 +156,14 @@ internal class OlmMachine @Inject constructor(
 
     fun inner(): InnerMachine {
         return inner
+    }
+
+    /**
+     * Get the dehydrated devices manager.
+     * Used for MSC3814 device dehydration support.
+     */
+    fun dehydratedDevices(): DehydratedDevices {
+        return inner.dehydratedDevices()
     }
 
     private suspend fun updateLiveDevices() {

@@ -233,6 +233,33 @@ interface CryptoService {
     suspend fun onSyncWillProcess(isInitialSync: Boolean)
     fun isStarted(): Boolean
 
+    // region Device Dehydration (MSC3814)
+
+    /**
+     * Run the device dehydration flow (MSC3814).
+     *
+     * This should be called after:
+     * 1. Security setup is complete (cross-signing bootstrapped, SSSS set up)
+     * 2. Secrets are recovered from recovery key or passphrase
+     *
+     * The flow will:
+     * - Check if a dehydrated device pickle key exists in SSSS
+     * - If yes: rehydrate the existing device, process its events, delete it, and create a new one
+     * - If no: generate a new pickle key, store it in SSSS, and create a new dehydrated device
+     *
+     * @param privateKeyData The private key data for accessing secret storage (from recovery key or passphrase)
+     */
+    suspend fun runDeviceDehydrationFlow(privateKeyData: ByteArray)
+
+    /**
+     * Check if device dehydration is available.
+     *
+     * @return true if dehydration can be performed (crypto is set up)
+     */
+    fun isDehydrationAvailable(): Boolean
+
+    // endregion
+
     suspend fun receiveSyncChanges(
             toDevice: ToDeviceSyncResponse?,
             deviceChanges: DeviceListResponse?,

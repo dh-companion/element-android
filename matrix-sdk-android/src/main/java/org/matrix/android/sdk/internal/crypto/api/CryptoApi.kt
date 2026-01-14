@@ -18,6 +18,10 @@ package org.matrix.android.sdk.internal.crypto.api
 import org.matrix.android.sdk.api.session.crypto.model.DeviceInfo
 import org.matrix.android.sdk.api.session.crypto.model.DevicesListResponse
 import org.matrix.android.sdk.api.util.JsonDict
+import org.matrix.android.sdk.internal.crypto.model.rest.CreateDehydratedDeviceResponse
+import org.matrix.android.sdk.internal.crypto.model.rest.DehydratedDeviceEventsRequest
+import org.matrix.android.sdk.internal.crypto.model.rest.DehydratedDeviceEventsResponse
+import org.matrix.android.sdk.internal.crypto.model.rest.DehydratedDeviceResponse
 import org.matrix.android.sdk.internal.crypto.model.rest.DeleteDeviceParams
 import org.matrix.android.sdk.internal.crypto.model.rest.DeleteDevicesParams
 import org.matrix.android.sdk.internal.crypto.model.rest.KeyChangesResponse
@@ -32,6 +36,7 @@ import org.matrix.android.sdk.internal.crypto.model.rest.UpdateDeviceInfoBody
 import org.matrix.android.sdk.internal.crypto.model.rest.UploadSigningKeysBody
 import org.matrix.android.sdk.internal.network.NetworkConstants
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.HTTP
 import retrofit2.http.POST
@@ -171,4 +176,44 @@ internal interface CryptoApi {
             @Query("from") oldToken: String,
             @Query("to") newToken: String
     ): KeyChangesResponse
+
+    // region Device Dehydration (MSC3814)
+
+    /**
+     * Create or replace a dehydrated device.
+     * MSC3814: https://github.com/matrix-org/matrix-spec-proposals/pull/3814
+     *
+     * @param body the dehydrated device data from the Rust SDK
+     */
+    @PUT(NetworkConstants.URI_API_PREFIX_PATH_UNSTABLE + "org.matrix.msc3814.v1/dehydrated_device")
+    suspend fun createDehydratedDevice(@Body body: JsonDict): CreateDehydratedDeviceResponse
+
+    /**
+     * Retrieve the dehydrated device.
+     * MSC3814: https://github.com/matrix-org/matrix-spec-proposals/pull/3814
+     */
+    @GET(NetworkConstants.URI_API_PREFIX_PATH_UNSTABLE + "org.matrix.msc3814.v1/dehydrated_device")
+    suspend fun getDehydratedDevice(): DehydratedDeviceResponse
+
+    /**
+     * Delete the dehydrated device.
+     * MSC3814: https://github.com/matrix-org/matrix-spec-proposals/pull/3814
+     */
+    @DELETE(NetworkConstants.URI_API_PREFIX_PATH_UNSTABLE + "org.matrix.msc3814.v1/dehydrated_device")
+    suspend fun deleteDehydratedDevice()
+
+    /**
+     * Get to-device events for a dehydrated device.
+     * MSC3814: https://github.com/matrix-org/matrix-spec-proposals/pull/3814
+     *
+     * @param deviceId the dehydrated device id
+     * @param body optional next_batch token for pagination
+     */
+    @POST(NetworkConstants.URI_API_PREFIX_PATH_UNSTABLE + "org.matrix.msc3814.v1/dehydrated_device/{deviceId}/events")
+    suspend fun getDehydratedDeviceEvents(
+            @Path("deviceId") deviceId: String,
+            @Body body: DehydratedDeviceEventsRequest
+    ): DehydratedDeviceEventsResponse
+
+    // endregion
 }
