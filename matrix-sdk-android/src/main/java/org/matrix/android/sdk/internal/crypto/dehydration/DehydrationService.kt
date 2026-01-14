@@ -177,13 +177,16 @@ internal class DehydrationService @Inject constructor(
      * Create a new dehydrated device and upload it to the server.
      */
     private suspend fun dehydrateDevice(pickleKeyData: ByteArray) {
+        Timber.d("🔐 [Dehydration] Creating dehydrated device...")
         val dehydratedDevices = olmMachine.dehydratedDevices()
         val dehydratedDevice = dehydratedDevices.create()
+        Timber.d("🔐 [Dehydration] Device created, generating keys for upload...")
 
         val request = dehydratedDevice.keysForUpload(
                 DEVICE_DISPLAY_NAME,
                 DehydratedDeviceKey(pickleKeyData)
         )
+        Timber.d("🔐 [Dehydration] Keys generated, body size: ${request.body.length} bytes")
 
         // Parse the request body and send to server
         val moshi = MoshiProvider.providesMoshi()
@@ -191,7 +194,16 @@ internal class DehydrationService @Inject constructor(
         val body = moshi.adapter(Map::class.java).fromJson(request.body) as? Map<String, Any>
                 ?: throw IllegalStateException("Failed to parse dehydrated device request body")
 
-        cryptoApi.createDehydratedDevice(body)
+        Timber.d("🔐 [Dehydration] Parsed body, keys: ${body.keys}")
+        Timber.d("🔐 [Dehydration] Sending PUT request to create dehydrated device...")
+
+        try {
+            val response = cryptoApi.createDehydratedDevice(body)
+            Timber.i("🔐 [Dehydration] PUT request succeeded, device ID: ${response.deviceId}")
+        } catch (e: Exception) {
+            Timber.e(e, "🔐 [Dehydration] PUT request failed")
+            throw e
+        }
     }
 
     /**
